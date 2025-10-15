@@ -80,8 +80,8 @@
     label {
       display: inline-flex;
       align-items: center;
-      gap: 0.35rem;
-      margin-top: 1.5rem;
+      gap: 0.15rem;
+      margin-top: 1.2rem;
       color: #e2e8f0;
       font-size: 0.95rem;
     }
@@ -127,7 +127,7 @@
       </select>
     </label>
     <p id="status">Tap "Roll the Dice" and point your phone north.</p>
-    <p class="hint">Compass readings are typically noisy. Give your device a moment to settle.</p>
+    <p class="hint"></p>
   </main>
 
   <script>
@@ -136,7 +136,7 @@
     const statusEl = document.getElementById('status');
     const fixedValueSelect = document.getElementById('fixedValue');
 
-    const NORTH_THRESHOLD = 15; // degrees of tolerance for "north"
+    const NORTH_THRESHOLD = 90; // degrees of tolerance for "north"
     let latestHeading = null;
     let orientationPermission = 'unknown';
     let listeningForHeading = false;
@@ -176,7 +176,7 @@
       }
 
       if (latestHeading === null) {
-        statusEl.textContent = 'Listening for compass data… Move your device gently in a figure eight to calibrate.';
+        statusEl.textContent = '';
         return;
       }
 

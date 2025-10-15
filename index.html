@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loaded Dice</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #2f80ed, #0f172a);
+      color: #f8fafc;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+
+    .app {
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(8, 47, 73, 0.35);
+      padding: 2.5rem 2rem;
+      width: min(420px, 100%);
+      text-align: center;
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: clamp(1.75rem, 5vw, 2.4rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #93c5fd;
+    }
+
+    .dice-display {
+      font-size: clamp(4rem, 12vw, 6rem);
+      font-weight: 700;
+      margin: 1rem 0 1.5rem;
+      color: #f8fafc;
+      text-shadow: 0 4px 14px rgba(248, 250, 252, 0.4);
+      min-height: 1em;
+      transition: color 0.2s ease, text-shadow 0.2s ease;
+    }
+
+    .dice-display.loaded {
+      color: #fbbf24;
+      text-shadow: 0 4px 14px rgba(251, 191, 36, 0.5);
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.85rem 2.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, #38bdf8, #3b82f6);
+      color: #0f172a;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button:active {
+      transform: scale(0.97);
+      box-shadow: inset 0 6px 14px rgba(15, 23, 42, 0.35);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 1.5rem;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+    }
+
+    select {
+      border-radius: 999px;
+      border: none;
+      padding: 0.35rem 0.75rem;
+      font-size: 1rem;
+      background: rgba(148, 163, 184, 0.25);
+      color: inherit;
+      backdrop-filter: blur(4px);
+    }
+
+    #status {
+      margin-top: 1.5rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: #cbd5f5;
+      min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <h1>Loaded Dice</h1>
+    <div id="diceDisplay" class="dice-display">–</div>
+    <button id="rollButton" type="button">Roll the Dice</button>
+    <label for="fixedValue">
+      Fixed value when facing north:
+      <select id="fixedValue">
+        <option value="6" selected>6</option>
+        <option value="5">5</option>
+        <option value="4">4</option>
+        <option value="3">3</option>
+        <option value="2">2</option>
+        <option value="1">1</option>
+      </select>
+    </label>
+    <p id="status"></p>
+  </main>
+
+  <script>
+    const diceDisplay = document.getElementById('diceDisplay');
+    const rollButton = document.getElementById('rollButton');
+    const statusEl = document.getElementById('status');
+    const fixedValueSelect = document.getElementById('fixedValue');
+
+    const NORTH_THRESHOLD = 45; // degrees of tolerance for "north"
+    let latestHeading = null;
+    let orientationPermission = 'unknown';
+    let listeningForHeading = false;
+
+    function formatHeading(heading) {
+      if (heading === null || Number.isNaN(heading)) {
+        return 'unknown';
+      }
+      return `${Math.round(heading)}°`;
+    }
+
+    function headingDifferenceFromNorth(heading) {
+      if (heading === null) return Infinity;
+      const normalized = ((heading % 360) + 360) % 360;
+      const diff = Math.abs(normalized);
+      return Math.min(diff, 360 - diff);
+    }
+
+    function isFacingNorth() {
+      return headingDifferenceFromNorth(latestHeading) <= NORTH_THRESHOLD;
+    }
+
+    function updateStatus() {
+      let message = '';
+
+      if (!('DeviceOrientationEvent' in window)) {
+        message = 'Compass access unavailable; rolls will always be random.';
+      } else if (orientationPermission === 'denied') {
+        message = 'Compass access was denied; rolls will always be random.';
+      } else if (!listeningForHeading) {
+        message = 'Waiting for compass permission…';
+      } else if (latestHeading === null) {
+        message = 'Listening for compass data…';
+      } else {
+        message = `Heading ${formatHeading(latestHeading)}.`;
+      }
+
+      statusEl.textContent = message;
+      diceDisplay.classList.toggle('loaded', isFacingNorth());
+    }
+
+    function handleOrientation(event) {
+      const heading = extractHeading(event);
+      if (heading === null) {
+        return;
+      }
+
+      latestHeading = heading;
+      updateStatus();
+    }
+
+    function extractHeading(event) {
+      if (typeof event.webkitCompassHeading === 'number') {
+        return event.webkitCompassHeading; // iOS specific true heading
+      }
+
+      if (typeof event.alpha === 'number') {
+        // On some devices, alpha=0 when pointing north and increases clockwise.
+        // Convert to compass heading (0 = north, 90 = east).
+        const heading = event.absolute ? event.alpha : 360 - event.alpha;
+        return (heading + 360) % 360;
+      }
+
+      return null;
+    }
+
+    function startListeningForHeading() {
+      if (listeningForHeading) return;
+
+      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.addEventListener('deviceorientation', handleOrientation, true);
+      listeningForHeading = true;
+      updateStatus();
+    }
+
+    async function ensureOrientationPermission() {
+      if (!('DeviceOrientationEvent' in window)) {
+        orientationPermission = 'unsupported';
+        updateStatus();
+        return false;
+      }
+
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        if (orientationPermission === 'granted') {
+          return true;
+        }
+        if (orientationPermission === 'denied') {
+          updateStatus();
+          return false;
+        }
+        try {
+          const result = await DeviceOrientationEvent.requestPermission();
+          orientationPermission = result;
+          if (result === 'granted') {
+            startListeningForHeading();
+            return true;
+          }
+          updateStatus();
+          return false;
+        } catch (error) {
+          console.error('Failed to request device orientation permission', error);
+          orientationPermission = 'denied';
+          updateStatus();
+          return false;
+        }
+      } else {
+        // Non-iOS browsers typically grant access without prompting.
+        orientationPermission = 'granted';
+        startListeningForHeading();
+        return true;
+      }
+    }
+
+    function rollRandomDie() {
+      return Math.floor(Math.random() * 6) + 1;
+    }
+
+    async function handleRollClick() {
+      rollButton.disabled = true;
+
+      const permissionOk = await ensureOrientationPermission();
+
+      const loaded = permissionOk && isFacingNorth();
+      let result;
+
+      if (loaded && Math.random() < 2 / 3) {
+        result = fixedValueSelect.value;
+      } else {
+        result = rollRandomDie();
+      }
+
+      diceDisplay.textContent = result;
+      diceDisplay.classList.toggle('loaded', loaded);
+
+      updateStatus();
+      setTimeout(() => {
+        rollButton.disabled = false;
+      }, 400);
+    }
+
+    rollButton.addEventListener('click', handleRollClick);
+
+    // Pre-emptively try to start listening on supported browsers without permission prompts.
+    if ('DeviceOrientationEvent' in window && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+      startListeningForHeading();
+    } else {
+      updateStatus();
+    }
+  </script>
+</body>
+</html>

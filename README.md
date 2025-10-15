@@ -13,3 +13,4 @@ The repository is configured to publish the site via GitHub Pages. Any push to t
 automated workflow that builds the static assets and deploys them to the `github-pages` environment. You can
 also trigger the workflow manually from the **Actions** tab using the **Run workflow** button if you need to
 redeploy without committing new changes.
+

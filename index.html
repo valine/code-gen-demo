@@ -97,17 +97,22 @@
     }
 
     #status {
-      margin-top: 1.5rem;
+      margin-top: 1.75rem;
       font-size: 0.95rem;
       line-height: 1.5;
       color: #cbd5f5;
-      min-height: 1.2em;
+    }
+
+    .hint {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: #94a3b8;
     }
   </style>
 </head>
 <body>
   <main class="app">
-    <h1>Loaded Dice</h1>
+    <h1>Northbound Loaded Dice</h1>
     <div id="diceDisplay" class="dice-display">–</div>
     <button id="rollButton" type="button">Roll the Dice</button>
     <label for="fixedValue">
@@ -121,7 +126,8 @@
         <option value="1">1</option>
       </select>
     </label>
-    <p id="status"></p>
+    <p id="status">Tap "Roll the Dice" and point your phone north.</p>
+    <p class="hint">Compass readings are typically noisy. Give your device a moment to settle.</p>
   </main>
 
   <script>
@@ -130,7 +136,7 @@
     const statusEl = document.getElementById('status');
     const fixedValueSelect = document.getElementById('fixedValue');
 
-    const NORTH_THRESHOLD = 45; // degrees of tolerance for "north"
+    const NORTH_THRESHOLD = 15; // degrees of tolerance for "north"
     let latestHeading = null;
     let orientationPermission = 'unknown';
     let listeningForHeading = false;
@@ -154,22 +160,31 @@
     }
 
     function updateStatus() {
-      let message = '';
-
       if (!('DeviceOrientationEvent' in window)) {
-        message = 'Compass access unavailable; rolls will always be random.';
-      } else if (orientationPermission === 'denied') {
-        message = 'Compass access was denied; rolls will always be random.';
-      } else if (!listeningForHeading) {
-        message = 'Waiting for compass permission…';
-      } else if (latestHeading === null) {
-        message = 'Listening for compass data…';
-      } else {
-        message = `Heading ${formatHeading(latestHeading)}.`;
+        statusEl.textContent = 'This browser does not support compass access. Rolling will always be random.';
+        return;
       }
 
-      statusEl.textContent = message;
-      diceDisplay.classList.toggle('loaded', isFacingNorth());
+      if (orientationPermission === 'denied') {
+        statusEl.textContent = 'Compass access was denied. Rolling will always be random.';
+        return;
+      }
+
+      if (!listeningForHeading) {
+        statusEl.textContent = 'Waiting for compass permission…';
+        return;
+      }
+
+      if (latestHeading === null) {
+        statusEl.textContent = 'Listening for compass data… Move your device gently in a figure eight to calibrate.';
+        return;
+      }
+
+      if (isFacingNorth()) {
+        statusEl.textContent = `Heading ${formatHeading(latestHeading)}. Facing north! The fixed roll is armed.`;
+      } else {
+        statusEl.textContent = `Heading ${formatHeading(latestHeading)}. Not north yet; rolls will be random.`;
+      }
     }
 
     function handleOrientation(event) {
@@ -253,17 +268,11 @@
 
       const permissionOk = await ensureOrientationPermission();
 
-      const loaded = permissionOk && isFacingNorth();
-      let result;
-
-      if (loaded && Math.random() < 2 / 3) {
-        result = fixedValueSelect.value;
+      if (permissionOk && isFacingNorth()) {
+        diceDisplay.textContent = fixedValueSelect.value;
       } else {
-        result = rollRandomDie();
+        diceDisplay.textContent = rollRandomDie();
       }
-
-      diceDisplay.textContent = result;
-      diceDisplay.classList.toggle('loaded', loaded);
 
       updateStatus();
       setTimeout(() => {
